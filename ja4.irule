@@ -9,6 +9,12 @@
 #  For full license text and more details, see the repo root https://github.com/FoxIO-LLC/ja4
 ###############################################################################################
 
+when RULE_INIT priority 100 {
+    # set this so we have a value for later
+    set ja4 "UNSET"
+
+}
+
 proc parseClientHello { payload rlen ja4_ver ja4_tprt } {
 
     set ja4_sni "i"
@@ -220,9 +226,9 @@ when CLIENT_DATA {
         #log local0. "rtype ${rtype} proto_ver ${proto_ver} rlen ${rlen} hs_type ${hs_type} rilen ${rilen} server_ver ${server_ver}"
         
         if { ( ${rtype} == 22 ) and ( ${hs_type} == 1 ) } {
-            #log local0. "Found CLIENT_HELLO"
+            log local0. "Found CLIENT_HELLO"
             set ja4 [call parseClientHello [TCP::payload] ${rlen} ${server_ver} ${ja4_tprt}]
-            #log local0. "JA4: '${ja4}'"
+            log local0. "JA4: '${ja4}'"
             
         }
     }
@@ -234,4 +240,21 @@ when CLIENT_DATA {
 
     ## Release the payload
     TCP::release
+}
+
+when HTTP_REQUEST priority 100 {
+
+    # add the fingerprint to a HTTP Header
+    HTTP::header insert "X-TLS-Fingerprint" $ja4
+
+    # # if the header is in the data group, we will raise a custom violation in AWAF
+    # if { [class match $ja4 equals "tls-fingerprints-to-block-datagroup" ]} {
+    #     ASM::raise TLSFingerPrint
+    # }
+
+}
+
+when HTTP_RESPONSE_RELEASE priority 100 {
+
+    HTTP::header remove "X-TLS-Fingerprint"
 }
